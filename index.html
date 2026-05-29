@@ -217,6 +217,22 @@ input, select, textarea, button { font-family: inherit; font-size: 15px; }
 .email-btn { display:inline-flex; align-items:center; gap:3px; background:#E6F1FB; color:var(--blue); border:none; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; }
 .email-btn:active { opacity:0.75; }
 .email-btn svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.photo-btn { display:inline-flex; align-items:center; gap:3px; background:#F1EFE8; color:var(--gray); border:none; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; position:relative; }
+.photo-btn:active { opacity:0.75; }
+.photo-btn svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.photo-btn .photo-count { position:absolute; top:-5px; right:-5px; background:var(--blue); color:#fff; border-radius:10px; font-size:9px; font-weight:700; padding:1px 4px; min-width:14px; text-align:center; line-height:14px; }
+/* Photo manager modal */
+#photo-modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:400; align-items:flex-end; }
+#photo-modal-bg.open { display:flex; }
+#photo-modal { background:var(--card); border-radius:20px 20px 0 0; padding:20px 16px calc(20px + var(--safe-bottom)); width:100%; max-height:90vh; overflow-y:auto; }
+.photo-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+.photo-thumb-wrap { position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; background:#f0ede8; }
+.photo-thumb-wrap img { width:100%; height:100%; object-fit:cover; display:block; cursor:pointer; }
+.photo-thumb-del { position:absolute; top:3px; right:3px; background:rgba(0,0,0,0.55); border:none; border-radius:50%; width:22px; height:22px; color:#fff; font-size:14px; line-height:22px; text-align:center; cursor:pointer; padding:0; }
+.photo-thumb-wrap.photo-adding { display:flex; align-items:center; justify-content:center; border:2px dashed var(--border); font-size:28px; color:var(--text3); cursor:pointer; }
+.photo-lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:500; align-items:center; justify-content:center; }
+.photo-lightbox.open { display:flex; }
+.photo-lightbox img { max-width:95vw; max-height:90vh; border-radius:8px; object-fit:contain; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1389,7 +1405,8 @@ function getFormData() {
     mileStart: parseFloat(document.getElementById('mile-start').value)||0,
     mileEnd:   parseFloat(document.getElementById('mile-end').value)||0,
     miles:     Math.max(0, (parseFloat(document.getElementById('mile-end').value)||0) - (parseFloat(document.getElementById('mile-start').value)||0)),
-    savedAt: new Date().toISOString()
+    savedAt: new Date().toISOString(),
+    photos: (editingId ? (invoices.find(i => i.id === editingId) || {}).photos || [] : [])
   };
 }
 
@@ -1561,6 +1578,12 @@ function renderList() {
              Email
            </button>`
         : '';
+      const photoCount = (inv.photos || []).length;
+      const photoCountBadge = photoCount > 0 ? `<span class="photo-count">${photoCount}</span>` : '';
+      const photoBtn = `<button class="photo-btn" onclick="event.stopPropagation();openPhotoModal(${inv.id})" title="Photos">
+             <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+             Photos${photoCountBadge}
+           </button>`;
       return `<div class="inv-item" onclick="loadInvoice(${inv.id})">
         <div class="inv-item-header">
           <div>
@@ -1572,6 +1595,7 @@ function renderList() {
             <div style="display:flex;align-items:center;gap:6px;">
               ${pdfBtn}
               ${emailBtn}
+              ${photoBtn}
               <button onclick="event.stopPropagation();deleteInvoice(${inv.id})" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px;">delete</button>
             </div>
           </div>
@@ -1601,11 +1625,17 @@ function renderList() {
              Email
            </button>`
         : '';
+      const pPhotoCount = (inv.photos || []).length;
+      const pPhotoBadge = pPhotoCount > 0 ? `<span class="photo-count">${pPhotoCount}</span>` : '';
+      const pPhotoBtn = `<button class="photo-btn" onclick="event.stopPropagation();openPhotoModal(${inv.id})" title="Photos" style="margin-top:3px;">
+             <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+             Photos${pPhotoBadge}
+           </button>`;
       return `<div class="paid-inv-item" onclick="loadInvoice(${inv.id})">
         <div class="paid-inv-num">#${inv.num}</div>
         <div class="paid-inv-name">${inv.custName || 'No customer'}</div>
         <div class="paid-inv-amt">${fmt(tots.total)}</div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;">${pdfBtn}${emailBtn}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;">${pdfBtn}${emailBtn}${pPhotoBtn}</div>
       </div>`;
     }).join('');
   }
@@ -2361,6 +2391,58 @@ function generateInvoicePdf(data) {
       y += noteLines.length * 11 + 6;
     }
 
+    // ── PHOTOS ──
+    const photos = data.photos || [];
+    if (photos.length > 0) {
+      // Start a new page for photos
+      pdf.addPage();
+      let py = MT;
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(26, 26, 24);
+      pdf.text('Job Photos', ML, py); py += 6;
+      pdf.setDrawColor(209, 208, 204);
+      pdf.setLineWidth(0.5);
+      pdf.line(ML, py, PW - MR, py); py += 16;
+
+      // 2-column grid
+      const cols = 2;
+      const gap = 12;
+      const imgW = (CW - gap * (cols - 1)) / cols;
+      const imgH = imgW * 0.75; // 4:3 ratio
+      let col = 0;
+
+      for (let pi = 0; pi < photos.length; pi++) {
+        const px = ML + col * (imgW + gap);
+        // New page if needed
+        if (py + imgH > PH - MT) {
+          pdf.addPage();
+          py = MT;
+        }
+        try {
+          // Strip data URI prefix to get raw base64
+          const raw = photos[pi].split(',')[1];
+          const fmt2 = photos[pi].startsWith('data:image/png') ? 'PNG' : 'JPEG';
+          pdf.addImage(raw, fmt2, px, py, imgW, imgH);
+          // Photo number caption
+          pdf.setFontSize(7);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(136, 135, 128);
+          pdf.text('Photo ' + (pi + 1), px + imgW / 2, py + imgH + 9, { align: 'center' });
+        } catch(e) { /* skip unreadable photo */ }
+
+        col++;
+        if (col >= cols) {
+          col = 0;
+          py += imgH + 20; // row height + caption + gap
+        }
+      }
+      // If last row was partial, advance y
+      if (col > 0) py += imgH + 20;
+      y = py;
+    }
+
     // ── FOOTER ──
     const footY = Math.max(y + 20, PH - 40);
     pdf.setDrawColor(209, 208, 204);
@@ -2476,7 +2558,153 @@ const manifest = {
 };
 const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
 document.getElementById('pwa-manifest').href = URL.createObjectURL(manifestBlob);
+
+// ── PHOTO MANAGEMENT ──────────────────────────────────────────────────────────
+
+let _photoModalInvId = null;
+
+function openPhotoModal(invId) {
+  _photoModalInvId = invId;
+  const inv = invoices.find(i => i.id === invId);
+  if (!inv) return;
+  const subtitle = document.getElementById('photo-modal-subtitle');
+  subtitle.textContent = '#' + inv.num + (inv.custName ? ' · ' + inv.custName : '');
+  renderPhotoGrid(inv.photos || []);
+  document.getElementById('photo-modal-bg').classList.add('open');
+}
+
+function closePhotoModal() {
+  document.getElementById('photo-modal-bg').classList.remove('open');
+  _photoModalInvId = null;
+}
+
+function renderPhotoGrid(photos) {
+  const grid = document.getElementById('photo-grid');
+  let html = '';
+  photos.forEach((src, i) => {
+    html += `<div class="photo-thumb-wrap">
+      <img src="${src}" loading="lazy" onclick="openLightbox('${src}')" />
+      <button class="photo-thumb-del" onclick="deletePhoto(${i})" title="Delete">✕</button>
+    </div>`;
+  });
+  // Add photo tile
+  html += `<div class="photo-thumb-wrap photo-adding" onclick="triggerCamera()" title="Take photo or choose">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+      <line x1="12" y1="10" x2="12" y2="16"/><line x1="9" y1="13" x2="15" y2="13"/>
+    </svg>
+  </div>`;
+  grid.innerHTML = html;
+}
+
+function triggerCamera() {
+  document.getElementById('photo-file-input').click();
+}
+
+function handlePhotoCapture(event) {
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
+  const inv = invoices.find(i => i.id === _photoModalInvId);
+  if (!inv) return;
+  if (!inv.photos) inv.photos = [];
+
+  let processed = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      // Compress via canvas
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > h && w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        else if (h > w && h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        else if (w > MAX) { w = MAX; h = MAX; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.72);
+        inv.photos.push(compressed);
+        processed++;
+        if (processed === files.length) {
+          savePhotos(inv);
+          renderPhotoGrid(inv.photos);
+          renderList();
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  // Reset input so same file can be re-selected
+  event.target.value = '';
+}
+
+function deletePhoto(index) {
+  if (!confirm('Delete this photo?')) return;
+  const inv = invoices.find(i => i.id === _photoModalInvId);
+  if (!inv || !inv.photos) return;
+  inv.photos.splice(index, 1);
+  savePhotos(inv);
+  renderPhotoGrid(inv.photos);
+  renderList();
+}
+
+function savePhotos(inv) {
+  const idx = invoices.findIndex(i => i.id === inv.id);
+  if (idx >= 0) invoices[idx] = inv;
+  localStorage.setItem('hg_invoices', JSON.stringify(invoices));
+  // Sync to Firebase (photos stored directly on invoice document)
+  if (window._fbReady && window._db) {
+    window._fbSetDoc(window._fbDoc(window._db, 'invoices', String(inv.id)), inv)
+      .catch(e => console.error('Photo sync error:', e));
+  }
+  // Regenerate PDF so photos are included
+  generateInvoicePdf(inv);
+}
+
+function openLightbox(src) {
+  document.getElementById('photo-lightbox-img').src = src;
+  document.getElementById('photo-lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('photo-lightbox').classList.remove('open');
+  document.getElementById('photo-lightbox-img').src = '';
+}
+
+// Close photo modal on bg tap — deferred so the element exists in DOM
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('photo-modal-bg').addEventListener('click', function(e) {
+    if (e.target === this) closePhotoModal();
+  });
+});
+
 </script>
 </div><!-- /app-content -->
+
+<!-- PHOTO MANAGER MODAL -->
+<div id="photo-modal-bg">
+  <div id="photo-modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div class="modal-title" style="margin-bottom:0;">📷 Photos</div>
+      <button onclick="closePhotoModal()" style="background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;padding:4px;">✕</button>
+    </div>
+    <div id="photo-modal-subtitle" style="font-size:12px;color:var(--text2);margin-bottom:4px;"></div>
+    <div class="photo-grid" id="photo-grid"></div>
+    <!-- hidden camera input -->
+    <input type="file" id="photo-file-input" accept="image/*" capture="environment"
+      style="display:none;" multiple onchange="handlePhotoCapture(event)" />
+  </div>
+</div>
+
+<!-- PHOTO LIGHTBOX -->
+<div class="photo-lightbox" id="photo-lightbox" onclick="closeLightbox()">
+  <img id="photo-lightbox-img" src="" alt="Photo" />
+</div>
+
 </body>
 </html>
